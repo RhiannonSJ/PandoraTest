@@ -83,8 +83,10 @@ private:
   float m_selectedBorderZ;
 
   // counters 
-  int events, fiducial, not_fiducial;
+  int events, fiducial, not_fiducial, topology;
 
+  // nTuples
+  TNtuple *fNt_vtx;
 };
 
 
@@ -101,26 +103,18 @@ pndr::PandoraTesting::PandoraTesting(fhicl::ParameterSet const & p)
 void pndr::PandoraTesting::analyze(art::Event const & e)
 {
  
-  events++;
-
   // Implementation of required member function here.
   // Get the MCTruth information 
   art::Handle< std::vector< simb::MCTruth > > mct_handle;
   e.getByLabel("generator", mct_handle );
   int mct_size = mct_handle->size();
-  
-  // Get the PFParticle information 
-  art::Handle< std::vector< recob::PFParticle > > pfp_handle;
-  e.getByLabel("pandoraNu", pfp_handle );
-  int pfp_size = pfp_handle->size();
-
   // Initialise to be true, and if any of the counters don't match, 
   // change to false
   bool contained_topology = true;
 
   typedef::std::map< std::vector< int >, int > topology_map;
   
-  if(mct_handle.isValid() && mct_size && pfp_handle.isValid() && pfp_size) {
+  if(mct_handle.isValid() && mct_size) {
   
     // Loop over the truth info
     for(auto const& mct : (*mct_handle)) {
@@ -128,6 +122,8 @@ void pndr::PandoraTesting::analyze(art::Event const & e)
       // Check the neutrino came from the beam
       if(mct.Origin() != simb::kBeamNeutrino) continue;
  
+      events++;
+
       //-------------------------------------------------------------------------
       //   Check the neutrino interaction vertex is within the fiducial volume
       //-------------------------------------------------------------------------
@@ -152,38 +148,100 @@ void pndr::PandoraTesting::analyze(art::Event const & e)
       
         fiducial++;
 
-      }
-      
-      //-------------------------------------------------------------------------
-      //                           Check the interaction
-      //-------------------------------------------------------------------------
- 
-      // Get the number of particles
-      const int n_particles = mct.NParticles();
- 
-      // Loop over the map and get the elements
-      for( topology_map::iterator it = m_selection.begin(); it != m_selection.end(); ++it ){
+        
+        //-------------------------------------------------------------------------
+        //                           Check the interaction
+        //-------------------------------------------------------------------------
+   
+        // Get the number of particles
+        const int n_particles = mct.NParticles();
+   
+        // Loop over the map and get the elements
+        for( topology_map::iterator it = m_selection.begin(); it != m_selection.end(); ++it ){
 
-        std::vector< int > pdgVect = it->first;
-        int                count   = it->second;
+          std::vector< int > pdgVect = it->first;
+          int                count   = it->second;
 
-        // Initialise a counter for the number within the mct vector
-        int particle_counter = 0;
+          // Initialise a counter for the number within the mct vector
+          int particle_counter = 0;
 
-        // Loop over the particles in the event
-        for( int i = 0; i < n_particles; ++i ){
+          // Loop over the particles in the event
+          for( int i = 0; i < n_particles; ++i ){
 
-          // Find if the pdg code of the current particle is one of the ones in the map
-          if( std::find( pdgVect.begin(), pdgVect.end(), mct.GetParticle(i).PdgCode() ) != pdgVect.end() ) ++particle_counter;
+            // Find if the pdg code of the current particle is one of the ones in the map
+            if( std::find( pdgVect.begin(), pdgVect.end(), mct.GetParticle(i).PdgCode() ) != pdgVect.end() ) ++particle_counter;
 
+          }
+
+          // If the counters don't match, return false
+          if( particle_counter != count ){
+
+            // Not topology event
+            contained_topology =  false;
+
+          }
         }
+      }
+    }
+  }
 
-        // If the counters don't match, return false
-        if( particle_counter != count ){
+  if( contained_topology ){
 
-          // Not topology event
-          contained_topology =  false;
+    topology++;
+    
+    // Get the PFParticle information 
+    art::Handle< std::vector< recob::PFParticle > > pfp_handle;
+    e.getByLabel("pandoraNu", pfp_handle );
+    int pfp_size = pfp_handle->size();
+    
+    if( pfp_handle.isValid() && pfp_size ){
+      
+      // Loop over truth
+      for( auto & mct : (*mct_handle) ){
 
+        // True neutrino vertex ( primary vertex position)
+        double nu_x, nu_y, nu_z;
+
+        nu_x = mct.GetNeutrino().Lepton().Vx();
+        nu_y = mct.GetNeutrino().Lepton().Vy();
+        nu_z = mct.GetNeutrino().Lepton().Vz();
+        
+        // If the current particle is the primary, get the track/vertex
+        // association and make a list of the distances from the true neutrino 
+        // vertex
+        art::FindMany< recob::Track  > ftrk( pfp_handle, e, "pandoraNu" );
+        art::FindMany< recob::Vertex > fvtx( pfp_handle, e, "pandoraNu" );
+
+        for( int i = 0; i < pfp_size; ++i ){
+        
+          art::Ptr< recob::PFParticle > pfp( pfp_handle, i );
+        
+          if( pfp->IsPrimary() ){
+            
+            // Define track and vertex handles
+            std::vector<const recob::Track*>  trk_assn = ftrk.at(i);
+            std::vector<const recob::Vertex*> vtx_assn = fvtx.at(i);
+          
+            // Get the distance from the associated reconstructed vertex and the
+            // true neutrino vertex
+            for( unsigned int j = 0; j < vtx_assn.size(); ++j ){
+            
+              double xyz[3];
+
+              // Set array to be current vertex position
+              vtx_assn[j]->XYZ(xyz);
+
+              // x,y,z of current vertex
+              double x, y, z, R;
+
+              x = xyz[0];
+              y = xyz[1];
+              z = xyz[2];
+              R =  sqrt( pow( ( x - nu_x ), 2 ) + pow( ( y - nu_y ), 2 ) + pow( ( z - nu_z ), 2 ) ); 
+        
+              fNt_vtx->Fill( x, y, z, nu_x, nu_y, nu_z, R );
+            }
+          }
         }
       }
     }
@@ -192,31 +250,69 @@ void pndr::PandoraTesting::analyze(art::Event const & e)
 
 void pndr::PandoraTesting::beginJob()
 {
+  
   // Implementation of optional member function here.
   // Counter initialisation
   events       = 0;
   fiducial     = 0;
   not_fiducial = 0;
+  topology     = 0;
+
+  // Initialise nTuples
+
+  fNt_vtx = new TNtuple( "fNt_vtx", "Pandora vertex metrics", "x:y:z:nuX:nuY:nuZ:R" );
+  fNt_vtx->SetDirectory(0);
 
 }
 
 void pndr::PandoraTesting::endJob()
 {
   // Implementation of optional member function here.
+  // Loop over everything and check it's working  
+  // Show the chosen topology to filter on
+  typedef::std::map< std::vector< int >, int > topology_map;
 
   std::cout << "=================================================================================" << std::endl;
   std::cout << "---------------------------------------------------------------------------------" << std::endl;
 
-  std::cout << " Number of events, total        : " << events       << std::endl;
-  std::cout << " Number of events, fiducial     : " << fiducial     << std::endl;
-  std::cout << " Number of events, not fiducial : " << not_fiducial << std::endl;
+  std::cout << "Topology:" << std::endl;
+  
+  for ( topology_map::iterator it = m_selection.begin(); it != m_selection.end(); ++it ) {
+    std::vector< int > pdgVect = it->first;
+    int                count   = it->second;
+    
+    std::cout << "  " << count << " particles with PDG in [";
+    for ( int pdg : pdgVect ) {
+        std::cout << " " << pdg << " ";
+    }
+    std::cout << "]" << std::endl;
+
+  }
 
   std::cout << "---------------------------------------------------------------------------------" << std::endl;
   
-  std::cout << " Fraction of fiducial events    : " << fiducial / double( events ) << std::endl;
+  std::cout << " Number of events, total           : " << events       << std::endl;
+  std::cout << " Number of events, fiducial        : " << fiducial     << std::endl;
+  std::cout << " Number of events, not fiducial    : " << not_fiducial << std::endl;
+  std::cout << " Number of events, fiducial, cc0pi : " << topology     << std::endl;
+
+  std::cout << "---------------------------------------------------------------------------------" << std::endl;
+  
+  std::cout << " Fraction of fiducial events       : " << fiducial / double( events )   << std::endl;
+  std::cout << " Fraction of fiducial cc0pi events : " << topology / double( fiducial ) << std::endl;
   
   std::cout << "---------------------------------------------------------------------------------" << std::endl;
   std::cout << "=================================================================================" << std::endl;
+
+  TFile *f = new TFile( "/sbnd/app/users/rsjones/LArSoft_v06_56_00/LArSoft-v06_56_00/srcs/pandoratesting/pandoratesting/root/pandora_vertex_metrics.root", "RECREATE" );
+
+  fNt_vtx->Write();
+
+  f->Close();
+
+  delete f;
+  delete fNt_vtx;
+
 }
 
 void pndr::PandoraTesting::reconfigure(fhicl::ParameterSet const & p)

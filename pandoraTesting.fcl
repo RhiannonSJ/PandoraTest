@@ -5,6 +5,7 @@ pandoraTesting:
     module_type:                "PandoraTesting"
 
      Selection1 : [ 1, 13 ]
+     Selection2 : [ 0, 211, -211, 111 ]
      Selection3 : [ 1, 14 ]
  
      DetectorHalfLengthX: 400.

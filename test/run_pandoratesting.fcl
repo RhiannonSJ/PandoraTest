@@ -6,11 +6,11 @@ PANDORA_DIR=/sbnd/app/users/rsjones/LArSoft_v06_56_00/LArSoft-v06_56_00/srcs/pan
 TEST_SBN_SINGLE_PANDORA=/pnfs/sbnd/scratch/users/rsjones/pandora_reco_files.txt
 TEST_SBN_SINGLE_PANDORA_2=/pnfs/sbnd/scratch/users/rsjones/pandora_reco_files_2.txt
 
-#rm -rf /sbnd/app/users/rsjones/LArSoft_v06_56_00/LArSoft-v06_56_00/srcs/pandoratesting/pandoratesting/plots/SBN_Workshop/primary_metrics/root/neutrino_vertex_finder.root
+rm -rf /sbnd/app/users/rsjones/LArSoft_v06_56_00/LArSoft-v06_56_00/srcs/pandoratest/pandoratest/root/pandora_vertex_metrics.root
 
 cd $WORKING_DIR
 
-#lar -c run_pandoraTesting.fcl -S $TEST_SBN_SINGLE_PANDORA
-lar -c run_pandoraTesting.fcl -S $TEST_SBN_SINGLE_PANDORA_2
+lar -c run_pandoraTesting.fcl -S $TEST_SBN_SINGLE_PANDORA
+#lar -c run_pandoraTesting.fcl -S $TEST_SBN_SINGLE_PANDORA_2
 
 cd $PANDORA_DIR
