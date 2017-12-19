@@ -22,7 +22,7 @@ Sum of track Kinetic Energies out of vertex
 
 ---------------------------------------------------------------------------------
 
-## Once therse comparisons have been made
+## Once these comparisons have been made
 Which performs best?
 
 PMA still needs to train its algorithms to find the primary
